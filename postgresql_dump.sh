@@ -3,11 +3,11 @@
 # Note you need the curl, jq, postgres-client-15 and pv packages to use this script!
 
 DATE=$(date '+%Y-%m-%d_%H-%M')
-DUMPFILEDIR="/mnt/mfs/Backups/matrix.penholder.xyz/postgresql/"
+DUMPFILEDIR="/mnt/mfs/Backups/matrix.perthchat.org/postgresql/"
 LOGFILE="$HOME/.psql_dumps.log"
-DBUSER="postgres"
+DBUSER="matrix"
 DBPORT=5432
-PATRONI_NODES=("postgres01.penholder.xyz" "postgres02.penholder.xyz" "postgres03.penholder.xyz")
+PATRONI_NODES=("postgres01.perthchat.org" "postgres02.perthchat.org" "postgres03.perthchat.org")
 MAXNUMDUMPS=30
 
 for url in "${PATRONI_NODES[@]}"; do
@@ -24,13 +24,21 @@ for url in "${PATRONI_NODES[@]}"; do
         echo "${DATE} - jq failed to parse the JSON from $url." >> ${LOGFILE}
         continue
     fi
-    if [ "$role" = "replica" ]; then
+    if [ "$role" = "master" ]; then
         DBHOST=$url
+        # Capture the start time
+        START_TIME=$(date +%s)
         # Execute the command
         time pg_dumpall -h ${DBHOST} -p ${DBPORT} -U ${DBUSER} | pv | pigz --stdout --fast --blocksize 16384 --independent --processes 4 --rsyncable > ${DUMPFILEDIR}postgres_${DATE}.sql.gz
         # Check the status of pg_dumpall
         if [ $? -eq 0 ]; then
-            echo "${DATE} - Database dump from replica ${DBHOST}:${DBPORT} was successful. The dump file is located at: ${DUMPFILEDIR}postgres_${DATE}.sql.gz" >> ${LOGFILE}
+            # Calculate the time taken
+            END_TIME=$(date +%s)
+            TIME_TAKEN=$((END_TIME - START_TIME))
+            HOURS=$((TIME_TAKEN / 3600))
+            MINUTES=$(( (TIME_TAKEN / 60) % 60))
+            SECONDS=$((TIME_TAKEN % 60))
+            echo "${DATE} - Database dump from replica ${DBHOST}:${DBPORT} was successful. The dump file is located at: ${DUMPFILEDIR}postgres_${DATE}.sql.gz The dump took $HOURS hours $MINUTES minutes $SECONDS seconds." >> ${LOGFILE}
             # If successful, exit the loop
             break
         else
